@@ -1,5 +1,6 @@
 const std = @import("std");
-
+const Meta = @import("meta.zig");
+const statement = @import("statement.zig");
 pub fn main(init: std.process.Init) !void{
     var input_buffer: [1024]u8 = undefined;
     var reader = std.Io.File.stdin().reader(init.io, &input_buffer);
@@ -13,13 +14,27 @@ pub fn main(init: std.process.Init) !void{
         try stdout.print("zsql> ", .{});
         try stdout.flush();
 
-        var input = try stdin.takeDelimiterInclusive('\n');
+        var rinput = try stdin.takeDelimiterInclusive('\n');
+        var input  = std.mem.trimEnd(u8,rinput[0..], "\n");
 
-        if (std.mem.eql(u8, std.mem.trimEnd(u8, input[0..], "\n"), ".exit")){
-            break;
+        if (input[0] == '.'){
+            switch (Meta.exec_meta_command(input[0..])) {
+                Meta.MetaCommandResult.META_SUCCESS => continue,
+                Meta.MetaCommandResult.META_EXIT => break,
+                Meta.MetaCommandResult.META_UNRECOGNIZED => {
+                    try stdout.print("unrecognized meta command : {s}\n", .{input});
+                    continue;
+                },
+            }
         }
 
-        try stdout.print("invalid query : {s}", .{input});
-        try stdout.flush();
+        var s: statement.Statement = undefined;
+        switch (s.prepare_statement(input[0..])) {
+            statement.PrepareResult.PREPARE_SUCCESS => try s.exec_statement(stdout),
+            statement.PrepareResult.PREPARE_INVALID_INPUT => {
+                try stdout.print("invalid statement : {s}\n", .{input});
+                try stdout.flush();
+            }
+        }
     }
 }
