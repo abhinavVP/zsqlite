@@ -32,7 +32,11 @@ pub fn main(init: std.process.Init) !void{
         switch (s.prepare_statement(input[0..])) {
             statement.PrepareResult.PREPARE_SUCCESS => try s.exec_statement(stdout),
             statement.PrepareResult.PREPARE_INVALID_INPUT => {
-                try stdout.print("invalid statement : {s}\n", .{input});
+                try stdout.print("invalid statement !\n", .{});
+                try stdout.flush();
+            },
+            statement.PrepareResult.PREPARE_SYNTAX_ERROR => {
+                try stdout.print("invalid syntax !\n", .{});
                 try stdout.flush();
             }
         }
