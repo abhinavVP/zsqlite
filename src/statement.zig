@@ -1,4 +1,5 @@
 const std = @import("std");
+const table = @import("table.zig");
 
 pub const StatementType = enum {
     STATEMENT_INSERT,
@@ -11,15 +12,15 @@ pub const PrepareResult = enum {
     PREPARE_SYNTAX_ERROR
 };
 
-pub const Row = struct {
-    id: u32,
-    username: [32]u8,
-    email: [255]u8
+pub const ExecuteResult = enum {
+    EXECUTE_SUCCESS,
+    EXECUTE_FAILURE,
+    EXECUTE_TABLE_FULL
 };
 
 pub const Statement = struct {
     type: StatementType,
-    row_to_insert: Row,
+    row_to_insert: table.Row,
 
     pub fn prepare_statement(self: *Statement, input: []const u8) PrepareResult{
         if (std.mem.eql(u8, input[0..6], "insert")){
@@ -34,14 +35,10 @@ pub const Statement = struct {
         return PrepareResult.PREPARE_INVALID_INPUT;
     }
 
-    pub fn exec_statement(self: Statement, writer: *std.Io.Writer) !void {
-        switch (self.type) {
-            StatementType.STATEMENT_INSERT => _ = try writer.write("this is an insert statement\n"),
-            StatementType.STATEMENT_SELECT => _ = try writer.write("this is a select statement\n")
-        }
-        try writer.flush();
+    pub fn exec_statement(self: Statement,) !void {
+        
     }
-
+    
     pub fn parse_insert_statement(self: *Statement, input: []const u8) PrepareResult{
         self.type = StatementType.STATEMENT_INSERT;
         var it = std.mem.splitScalar(u8, input, ' ');
