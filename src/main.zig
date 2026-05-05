@@ -2,6 +2,8 @@ const std = @import("std");
 const Meta = @import("meta.zig");
 const statement = @import("statement.zig");
 const table = @import("table.zig");
+
+
 pub fn main(init: std.process.Init) !void{
     var input_buffer: [1024]u8 = undefined;
     var reader = std.Io.File.stdin().reader(init.io, &input_buffer);
