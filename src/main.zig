@@ -25,48 +25,18 @@ pub fn main(init: std.process.Init) !void{
         var input  = std.mem.trimEnd(u8,rinput[0..], " \n");
 
         if (input[0] == '.'){
-            switch (Meta.exec_meta_command(input[0..])) {
-                Meta.MetaCommandResult.META_SUCCESS => continue,
-                Meta.MetaCommandResult.META_EXIT => break,
-                Meta.MetaCommandResult.META_UNRECOGNIZED => {
-                    try stdout.print("error: unrecognized meta command : {s}\n", .{input});
-                    continue;
-                },
-            }
+            const meta_res = Meta.exec_meta_command(input[0..]);
+            const should_continue = try Meta.handle_meta_result(meta_res, stdout);
+            if (should_continue) { continue; }
+            else break;
         }
         var s: statement.Statement = undefined;
 
-        switch (s.prepare_statement(input[0..])) {
-            statement.PrepareResult.PREPARE_SUCCESS => {},
-            statement.PrepareResult.PREPARE_INVALID_INPUT => {
-                try stdout.print("error: invalid statement !\n", .{});
-                try stdout.flush();
-                continue;
-            },
-            statement.PrepareResult.PREPARE_SYNTAX_ERROR => {
-                try stdout.print("error: invalid syntax !\n", .{});
-                try stdout.flush();
-                continue;
-            },
-        }
+        const prep_res = s.prepare_statement(input[0..]);
+        const should_continue = try statement.handle_prepare_result(prep_res, stdout);
+        if (should_continue) continue;
 
-        switch (s.exec_statement(page_allocator, init.io, &dbtable)) {
-            statement.ExecuteResult.EXECUTE_SUCCESS => {
-                try stdout.print("done: statment ran successfully !\n", .{});
-                try stdout.flush();
-            },
-            statement.ExecuteResult.EXECUTE_TABLE_EMPTY=> {
-                try stdout.print("error: table is empty !\n", .{});
-                try stdout.flush();
-            },
-            statement.ExecuteResult.EXECUTE_TABLE_FULL => {
-                try stdout.print("error: database table is full, cant insert more !\n", .{});
-                try stdout.flush();
-            },
-            else => {
-                try stdout.print("error: out of program memory !\n", .{});
-                try stdout.flush();
-            }
-        }
+        const exe_res = (s.exec_statement(page_allocator, init.io, &dbtable));
+        try statement.handle_execute_result(exe_res, stdout);
     }
 }

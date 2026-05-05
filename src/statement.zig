@@ -106,3 +106,39 @@ pub const Statement = struct {
     }
 };
 
+pub fn handle_prepare_result(result: PrepareResult, stdout: *std.Io.Writer) !bool{
+    switch (result) {
+        .PREPARE_SUCCESS => return false,
+        .PREPARE_INVALID_INPUT => {
+            try stdout.print("error: invalid statement !\n", .{});
+            try stdout.flush();
+            return true;
+        },
+        .PREPARE_SYNTAX_ERROR => {
+            try stdout.print("error: invalid syntax !\n", .{});
+            try stdout.flush();
+            return true;
+        },
+    }
+}
+
+pub fn handle_execute_result(result: ExecuteResult, stdout: *std.Io.Writer) !void {
+    switch (result) {
+        .EXECUTE_SUCCESS => {
+            try stdout.print("done: statment ran successfully !\n", .{});
+            try stdout.flush();
+        },
+        .EXECUTE_TABLE_EMPTY=> {
+            try stdout.print("error: table is empty !\n", .{});
+            try stdout.flush();
+        },
+        .EXECUTE_TABLE_FULL => {
+            try stdout.print("error: database table is full, cant insert more !\n", .{});
+            try stdout.flush();
+        },
+        else => {
+            try stdout.print("error: out of program memory !\n", .{});
+            try stdout.flush();
+        }
+    }
+}

@@ -13,3 +13,15 @@ pub fn exec_meta_command(input:[]const u8) MetaCommandResult {
         return MetaCommandResult.META_UNRECOGNIZED;
     }
 }
+
+pub fn handle_meta_result(result: MetaCommandResult, stdout: *std.Io.Writer) !bool {
+    switch (result) {
+        .META_SUCCESS => return true,
+        .META_EXIT => return false,
+        .META_UNRECOGNIZED => {
+            try stdout.print("error: unrecognized meta command !\n", .{});
+            try stdout.flush();
+            return true;
+        },
+    }
+}
