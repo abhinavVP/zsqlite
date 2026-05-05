@@ -48,10 +48,10 @@ pub const Table = struct {
         };
     }
 
-    pub fn row_slot(self: *Table, allocator: std.mem.Allocator, rno: u32) ![]u8{
+    pub fn row_slot(self: *Table, allocator: ?std.mem.Allocator, rno: u32) ![]u8{
         const pgno = rno / ROWS_PER_PAGE;
         if (self.pages[pgno] == null){
-            self.pages[pgno] = try allocator.alloc(u8, PAGE_SIZE);
+            self.pages[pgno] = try allocator.?.alloc(u8, PAGE_SIZE);
         }
 
         const page = self.pages[pgno].?;

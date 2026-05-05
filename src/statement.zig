@@ -45,7 +45,7 @@ pub const Statement = struct {
     pub fn exec_statement(self: *Statement, allocator: std.mem.Allocator, io: std.Io, t: *table.Table) ExecuteResult{
         switch (self.type){
             StatementType.STATEMENT_INSERT => return self.exec_insert(allocator, t),
-            StatementType.STATEMENT_SELECT => return exec_select(io, allocator, t),
+            StatementType.STATEMENT_SELECT => return exec_select(io, t),
         }
     }
 
@@ -61,7 +61,7 @@ pub const Statement = struct {
         return .EXECUTE_SUCCESS;
     }
 
-    pub fn exec_select(io: std.Io, allocator: std.mem.Allocator, t: *table.Table) ExecuteResult {
+    pub fn exec_select(io: std.Io, t: *table.Table) ExecuteResult {
         var output_buffer: [1024]u8 = undefined;
         var writer = std.Io.File.stdout().writer(io, &output_buffer);
         const stdout = &writer.interface;
@@ -71,7 +71,7 @@ pub const Statement = struct {
         var row: table.Row = undefined;
         var i:u32 = 0;
         while (i < t.n_rows) : (i += 1) {
-            var row_raw = t.row_slot(allocator, i) catch return .EXECUTE_FAILURE;
+            var row_raw = t.row_slot(null, i) catch return .EXECUTE_FAILURE;
             table.Row.deserialize(row_raw[0..], &row);
             print_row(row, stdout) catch return .EXECUTE_FAILURE;
         }
