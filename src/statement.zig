@@ -32,7 +32,7 @@ pub const Statement = struct {
     row_to_insert: table.Row,
 
     pub fn prepare_statement(self: *Statement, input: []const u8) PrepareResult{
-        if (input.len > 6 and std.mem.eql(u8, input[0..6], "insert")){
+        if (input.len > 6 and std.mem.eql(u8, input[0..7], "insert ")){
             return self.parse_insert_statement(input[7..]);
         }
 
@@ -51,12 +51,12 @@ pub const Statement = struct {
         }
     }
 
-    pub fn exec_insert(self: *Statement, io: std.Io, allocator: ?std.mem.Allocator, t: *table.Table) ExecuteResult {
+    pub fn exec_insert(self: *Statement, io: std.Io, allocator: std.mem.Allocator, t: *table.Table) ExecuteResult {
         if (t.n_rows >= table.TABLE_MAX_ROWS){
             return .EXECUTE_TABLE_FULL;
         }
 
-        const slot = t.row_slot(io, allocator.?, t.n_rows) catch return .EXECUTE_FAILURE;    
+        const slot = t.row_slot(io, allocator, t.n_rows) catch return .EXECUTE_FAILURE;    
         self.row_to_insert.serialize(slot);
         t.n_rows += 1;
         

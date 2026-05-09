@@ -46,7 +46,6 @@ pub const Table = struct {
         const p = try pager.Pager.open(path, io);
         const file_len: u32 = @intCast(p.file_len);
 
-        std.debug.print("{}", .{file_len});
         return Table {
             .n_rows = file_len / ROW_SIZE,
             .pager = p
