@@ -1,4 +1,5 @@
 const std = @import("std");
+const Table = @import("table.zig").Table;
 
 pub const MetaCommandResult = enum {
     META_SUCCESS,
@@ -14,10 +15,17 @@ pub fn exec_meta_command(input:[]const u8) MetaCommandResult {
     }
 }
 
-pub fn handle_meta_result(result: MetaCommandResult, stdout: *std.Io.Writer) !bool {
+pub fn handle_meta_result(result: MetaCommandResult, io: std.Io, table: *Table) !bool {
+    var buf: [1024]u8 = undefined;
+    var w = std.Io.File.stdout().writer(io, &buf);
+    const stdout = &w.interface;
+
     switch (result) {
         .META_SUCCESS => return true,
-        .META_EXIT => return false,
+        .META_EXIT => {
+            try table.db_close(io);
+            return false;
+        },
         .META_UNRECOGNIZED => {
             try stdout.print("error: unrecognized meta command !\n", .{});
             try stdout.flush();
@@ -25,3 +33,4 @@ pub fn handle_meta_result(result: MetaCommandResult, stdout: *std.Io.Writer) !bo
         },
     }
 }
+

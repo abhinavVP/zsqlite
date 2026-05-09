@@ -10,7 +10,9 @@ pub const StatementType = enum {
 pub const PrepareResult = enum {
     PREPARE_SUCCESS,
     PREPARE_INVALID_INPUT,
-    PREPARE_SYNTAX_ERROR
+    PREPARE_SYNTAX_ERROR,
+    PREPARE_STRING_TOO_LONG,
+    PREPARE_INVALID_INPUT_FOR_INT,
 };
 
 pub const ExecuteResult = enum {
@@ -44,24 +46,24 @@ pub const Statement = struct {
 
     pub fn exec_statement(self: *Statement, allocator: std.mem.Allocator, io: std.Io, t: *table.Table) ExecuteResult{
         switch (self.type){
-            StatementType.STATEMENT_INSERT => return self.exec_insert(allocator, t),
-            StatementType.STATEMENT_SELECT => return exec_select(io, t),
+            StatementType.STATEMENT_INSERT => return self.exec_insert(io, allocator, t),
+            StatementType.STATEMENT_SELECT => return exec_select(io, allocator, t),
         }
     }
 
-    pub fn exec_insert(self: *Statement, allocator: std.mem.Allocator, t: *table.Table) ExecuteResult {
+    pub fn exec_insert(self: *Statement, io: std.Io, allocator: ?std.mem.Allocator, t: *table.Table) ExecuteResult {
         if (t.n_rows >= table.TABLE_MAX_ROWS){
             return .EXECUTE_TABLE_FULL;
         }
 
-        const slot = t.row_slot(allocator, t.n_rows) catch return .EXECUTE_FAILURE;    
+        const slot = t.row_slot(io, allocator.?, t.n_rows) catch return .EXECUTE_FAILURE;    
         self.row_to_insert.serialize(slot);
         t.n_rows += 1;
         
         return .EXECUTE_SUCCESS;
     }
 
-    pub fn exec_select(io: std.Io, t: *table.Table) ExecuteResult {
+    pub fn exec_select(io: std.Io, allocator: std.mem.Allocator, t: *table.Table) ExecuteResult {
         var output_buffer: [1024]u8 = undefined;
         var writer = std.Io.File.stdout().writer(io, &output_buffer);
         const stdout = &writer.interface;
@@ -71,7 +73,7 @@ pub const Statement = struct {
         var row: table.Row = undefined;
         var i:u32 = 0;
         while (i < t.n_rows) : (i += 1) {
-            var row_raw = t.row_slot(null, i) catch return .EXECUTE_FAILURE;
+            var row_raw = t.row_slot(io, allocator, i) catch return .EXECUTE_FAILURE;
             table.Row.deserialize(row_raw[0..], &row);
             print_row(row, stdout) catch return .EXECUTE_FAILURE;
         }
@@ -91,18 +93,20 @@ pub const Statement = struct {
         self.type = StatementType.STATEMENT_INSERT;
         var it = std.mem.splitScalar(u8, input, ' ');
 
-        const id = it.next() orelse return PrepareResult.PREPARE_SYNTAX_ERROR;
-        self.row_to_insert.id = std.fmt.parseInt(u32, id, 10) catch return PrepareResult.PREPARE_SYNTAX_ERROR;
+        const id = it.next() orelse return .PREPARE_SYNTAX_ERROR;
+        const idu32 = std.fmt.parseInt(u32, id, 10) catch return .PREPARE_INVALID_INPUT_FOR_INT;
+        if (idu32 < 0) return .PREPARE_INVALID_INPUT_FOR_INT;
+        self.row_to_insert.id = idu32;
 
-        const uname = it.next() orelse return PrepareResult.PREPARE_SYNTAX_ERROR;
-        if (uname.len > 32) return PrepareResult.PREPARE_SYNTAX_ERROR;
+        const uname = it.next() orelse return .PREPARE_SYNTAX_ERROR;
+        if (uname.len > 32) return .PREPARE_STRING_TOO_LONG;
         @memmove(self.row_to_insert.username[0..uname.len], uname);
 
-        const email = it.next() orelse return PrepareResult.PREPARE_SYNTAX_ERROR;
-        if (email.len > 255) return PrepareResult.PREPARE_SYNTAX_ERROR;
+        const email = it.next() orelse return .PREPARE_SYNTAX_ERROR;
+        if (email.len > 255) return .PREPARE_STRING_TOO_LONG;
         @memmove(self.row_to_insert.email[0..email.len], email);
 
-        return PrepareResult.PREPARE_SUCCESS;   
+        return .PREPARE_SUCCESS;   
     }
 };
 
@@ -119,6 +123,16 @@ pub fn handle_prepare_result(result: PrepareResult, stdout: *std.Io.Writer) !boo
             try stdout.flush();
             return true;
         },
+        .PREPARE_INVALID_INPUT_FOR_INT => {
+            try stdout.print("error: invalid input for integer type !\n", .{});
+            try stdout.flush();
+            return true;
+        },
+        .PREPARE_STRING_TOO_LONG => {
+            try stdout.print("error: string too long !\n", .{});
+            try stdout.flush();
+            return true;
+        }
     }
 }
 
