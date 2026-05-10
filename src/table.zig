@@ -40,10 +40,10 @@ pub const Row = struct {
 
 pub const Table = struct {
     n_rows: u32,
-    pager: pager.Pager,
+    pager: *pager.Pager,
 
-    pub fn db_open(path: []const u8, io: std.Io) !Table{
-        const p = try pager.Pager.open(path, io);
+    pub fn db_open(path: []const u8, io: std.Io, allocator: std.mem.Allocator) !Table{
+        const p = try pager.Pager.open(allocator, path, io);
         const file_len: u32 = @intCast(p.file_len);
 
         return Table {
@@ -61,8 +61,8 @@ pub const Table = struct {
         return page[boffset..boffset+ROW_SIZE];
     }
 
-    pub fn db_close(self: *Table, io: std.Io) !void {
-        const p = &self.pager;
+    pub fn db_close(self: *Table, io: std.Io, allocator: std.mem.Allocator) !void {
+        const p = self.pager;
         const n_full_pages: u32 = self.n_rows / ROWS_PER_PAGE;
 
         var buf:[1024]u8 = undefined;
@@ -70,11 +70,11 @@ pub const Table = struct {
         const stdout = &w.interface;
 
         for (0..n_full_pages) |pgno| {
-            if (p.pages[pgno] == null) {
+            if (p.*.pages[pgno] == null) {
                 continue;
             }
 
-            p.flush(io, pgno, PAGE_SIZE) catch |err| switch (err) {
+            p.*.flush(io, pgno, PAGE_SIZE) catch |err| switch (err) {
                 error.NullPage => continue,
                 else => {
                     try stdout.print("error: got a write error when trying to flush on page {d}\n", .{pgno});
@@ -86,7 +86,7 @@ pub const Table = struct {
         const additional_rows = self.n_rows % ROWS_PER_PAGE;
 
         if (additional_rows > 0){
-            p.flush(io, @as(usize, n_full_pages), additional_rows*ROW_SIZE) catch |err| switch (err) {
+            p.*.flush(io, @as(usize, n_full_pages), additional_rows*ROW_SIZE) catch |err| switch (err) {
                 error.NullPage => {},
                 else => {
                     try stdout.print("error: got a write error when trying to flush on page {d}\n", .{self.n_rows});
@@ -95,6 +95,7 @@ pub const Table = struct {
             };
         }
 
-        p.file.close(io);
+        p.*.file.close(io);
+        allocator.destroy(p);
     }
 };

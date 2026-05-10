@@ -15,7 +15,7 @@ pub fn exec_meta_command(input:[]const u8) MetaCommandResult {
     }
 }
 
-pub fn handle_meta_result(result: MetaCommandResult, io: std.Io, table: *Table) !bool {
+pub fn handle_meta_result(result: MetaCommandResult, io: std.Io, allocator: std.mem.Allocator, table: *Table) !bool {
     var buf: [1024]u8 = undefined;
     var w = std.Io.File.stdout().writer(io, &buf);
     const stdout = &w.interface;
@@ -23,7 +23,7 @@ pub fn handle_meta_result(result: MetaCommandResult, io: std.Io, table: *Table) 
     switch (result) {
         .META_SUCCESS => return true,
         .META_EXIT => {
-            try table.db_close(io);
+            try table.db_close(io, allocator);
             return false;
         },
         .META_UNRECOGNIZED => {

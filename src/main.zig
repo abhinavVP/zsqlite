@@ -17,8 +17,13 @@ pub fn main(init: std.process.Init) !void{
     defer arena.deinit();
     const page_allocator = arena.allocator();
 
+    var dbg = std.heap.DebugAllocator(.{}){};
+    // defer _ = allocator.deinit();
+    const gpa = dbg.allocator();
+
     const path:[]const u8= "/home/abhinav7/timepass/zsql/file.txt";
-    var dbtable = try table.Table.db_open(path[0..], init.io);
+    var dbtable = try table.Table.db_open(path[0..], init.io, gpa);
+    
     
     while (true) {
         try stdout.print("zsql> ", .{});
@@ -29,7 +34,7 @@ pub fn main(init: std.process.Init) !void{
 
         if (input[0] == '.'){
             const meta_res = Meta.exec_meta_command(input[0..]);
-            const should_continue = try Meta.handle_meta_result(meta_res, init.io, &dbtable);
+            const should_continue = try Meta.handle_meta_result(meta_res, init.io, gpa, &dbtable);
             if (should_continue) { continue; }
             else break;
         }

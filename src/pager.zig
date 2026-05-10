@@ -6,16 +6,16 @@ pub const Pager = struct {
     file_len: u64,
     pages: [table.TABLE_MAX_PAGES]?[]u8,
 
-    pub fn open(file_path: []const u8, io: std.Io) !Pager {
+    pub fn open(allocator: std.mem.Allocator, file_path: []const u8, io: std.Io) !*Pager {
         const cwd = std.Io.Dir.cwd();
         const file = try cwd.openFile(io, file_path, . {.mode = .read_write});
         const file_len = try file.length(io);
+        var p = try allocator.create(Pager);
 
-        return Pager{
-            .file = file,
-            .file_len = file_len,
-            .pages = .{null} ** table.TABLE_MAX_PAGES,
-        };
+        p.file = file;
+        p.file_len = file_len;
+        p.pages = .{null} ** table.TABLE_MAX_PAGES;
+        return p;
     }
 
     pub fn get_page(p: *Pager, io: std.Io, allocator: std.mem.Allocator, pg_no: u32) ![]u8 {
