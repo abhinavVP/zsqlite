@@ -1,5 +1,6 @@
 const std = @import("std");
 const pager = @import("pager.zig");
+const Allocator = std.mem.Allocator;
 
 pub const ROW_SIZE = @sizeOf(u32) + @sizeOf([32]u8) + @sizeOf([255]u8);
 pub const PAGE_SIZE: u32 = 4096;
@@ -52,15 +53,6 @@ pub const Table = struct {
         };
     }
 
-    pub fn row_slot(self: *Table, io: std.Io, allocator: std.mem.Allocator, rno: u32) ![]u8{
-        const pgno = rno / ROWS_PER_PAGE;
-        const page = try self.pager.get_page(io, allocator, pgno);
-        const roffset = rno % ROWS_PER_PAGE;
-        const boffset = roffset * ROW_SIZE;
-        
-        return page[boffset..boffset+ROW_SIZE];
-    }
-
     pub fn db_close(self: *Table, io: std.Io, allocator: std.mem.Allocator) !void {
         const p = self.pager;
         const n_full_pages: u32 = self.n_rows / ROWS_PER_PAGE;
@@ -97,5 +89,43 @@ pub const Table = struct {
 
         p.*.file.close(io);
         allocator.destroy(p);
+    }
+};
+
+pub const Cursor = struct {
+    db: *Table,
+    row_no: u32,
+    end_of_table: bool,
+
+    pub fn table_start(allocator: Allocator, t: *Table) !*Cursor{
+        var c = try allocator.create(Cursor);
+        c.db = t;
+        c.row_no = 0;
+        c.end_of_table = (t.n_rows == 0);
+
+        return c;
+    }
+
+    pub fn table_end(allocator: Allocator, t: *Table) !*Cursor {
+        var c = try allocator.create(Cursor);
+        c.db = t;
+        c.row_no = t.n_rows;
+        c.end_of_table = true;
+
+        return c;
+    }
+
+    pub fn value_at_position(self: *Cursor, io: std.Io, pgallocator: Allocator) ![]u8{
+        const pgno = self.row_no / ROWS_PER_PAGE;
+        const page = try self.db.pager.get_page(io, pgallocator, pgno);
+        const roffset = self.row_no % ROWS_PER_PAGE;
+        const boffset = roffset * ROW_SIZE;
+        
+        return page[boffset..boffset+ROW_SIZE];
+    }
+
+    pub fn advance(self: *Cursor) void {
+        self.row_no += 1;
+        if (self.row_no == self.db.n_rows) self.end_of_table = true;
     }
 };

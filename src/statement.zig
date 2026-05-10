@@ -1,6 +1,6 @@
 const std = @import("std");
 const table = @import("table.zig");
-const ssmap = std.static_string_map;
+const Allocator = std.mem.Allocator;
 
 pub const StatementType = enum {
     STATEMENT_INSERT,
@@ -22,11 +22,6 @@ pub const ExecuteResult = enum {
     EXECUTE_TABLE_EMPTY,
 };
 
-// pub const command_mapp = ssmap.StaticStringMap(StatementType).initComptime(.{
-//     .{"insert", .STATEMENT_INSERT},
-//     .{"select", .STATEMENT_SELECT}
-// });
-
 pub const Statement = struct {
     type: StatementType,
     row_to_insert: table.Row,
@@ -44,39 +39,47 @@ pub const Statement = struct {
         return PrepareResult.PREPARE_INVALID_INPUT;
     }
 
-    pub fn exec_statement(self: *Statement, allocator: std.mem.Allocator, io: std.Io, t: *table.Table) ExecuteResult{
+    pub fn exec_statement(self: *Statement, io: std.Io, pg_allocator: Allocator,crs_allocator: Allocator, t: *table.Table) ExecuteResult{
         switch (self.type){
-            StatementType.STATEMENT_INSERT => return self.exec_insert(io, allocator, t),
-            StatementType.STATEMENT_SELECT => return exec_select(io, allocator, t),
+            StatementType.STATEMENT_INSERT => return self.exec_insert(io, pg_allocator, crs_allocator, t),
+            StatementType.STATEMENT_SELECT => return exec_select(io, pg_allocator, crs_allocator, t),
         }
     }
 
-    pub fn exec_insert(self: *Statement, io: std.Io, allocator: std.mem.Allocator, t: *table.Table) ExecuteResult {
+    pub fn exec_insert(self: *Statement, io: std.Io, pg_allocator: Allocator, crs_allocator: Allocator, t: *table.Table) ExecuteResult {
         if (t.n_rows >= table.TABLE_MAX_ROWS){
             return .EXECUTE_TABLE_FULL;
         }
 
-        const slot = t.row_slot(io, allocator, t.n_rows) catch return .EXECUTE_FAILURE;    
+        var cursor = table.Cursor.table_end(crs_allocator, t) catch return .EXECUTE_FAILURE;
+
+        const slot = cursor.value_at_position(io, pg_allocator) catch return .EXECUTE_FAILURE;    
         self.row_to_insert.serialize(slot);
         t.n_rows += 1;
+
+        crs_allocator.destroy(cursor);
         
         return .EXECUTE_SUCCESS;
     }
 
-    pub fn exec_select(io: std.Io, allocator: std.mem.Allocator, t: *table.Table) ExecuteResult {
+    pub fn exec_select(io: std.Io, pg_allocator: Allocator, crs_allocator: Allocator, t: *table.Table) ExecuteResult {
         var output_buffer: [1024]u8 = undefined;
         var writer = std.Io.File.stdout().writer(io, &output_buffer);
         const stdout = &writer.interface;
 
         if (t.n_rows == 0) return .EXECUTE_TABLE_EMPTY;
 
+        var cursor = table.Cursor.table_start(crs_allocator, t) catch return .EXECUTE_FAILURE;
+
         var row: table.Row = undefined;
-        var i:u32 = 0;
-        while (i < t.n_rows) : (i += 1) {
-            var row_raw = t.row_slot(io, allocator, i) catch return .EXECUTE_FAILURE;
+        while (!(cursor.end_of_table)){
+            var row_raw = cursor.value_at_position(io, pg_allocator) catch return .EXECUTE_FAILURE;
             table.Row.deserialize(row_raw[0..], &row);
             print_row(row, stdout) catch return .EXECUTE_FAILURE;
+            cursor.advance();
         }
+
+        crs_allocator.destroy(cursor);
 
         return .EXECUTE_SUCCESS;
     }

@@ -18,7 +18,7 @@ pub fn main(init: std.process.Init) !void{
     const page_allocator = arena.allocator();
 
     var dbg = std.heap.DebugAllocator(.{}){};
-    // defer _ = allocator.deinit();
+    defer _ = dbg.deinit();
     const gpa = dbg.allocator();
 
     const path:[]const u8= "/home/abhinav7/timepass/zsql/file.txt";
@@ -45,7 +45,7 @@ pub fn main(init: std.process.Init) !void{
         const should_continue = try statement.handle_prepare_result(prep_res, stdout);
         if (should_continue) continue;
 
-        const exe_res = (s.exec_statement(page_allocator, init.io, &dbtable));
+        const exe_res = (s.exec_statement(init.io, page_allocator, gpa, &dbtable));
         try statement.handle_execute_result(exe_res, stdout);
     }
 }
