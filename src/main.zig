@@ -1,7 +1,7 @@
 const std = @import("std");
-const Meta = @import("meta.zig");
-const statement = @import("statement.zig");
-const table = @import("table.zig");
+const Meta = @import("commands/meta.zig");
+const statement = @import("commands/statement.zig");
+const table = @import("storage/table.zig");
 
 
 pub fn main(init: std.process.Init) !void{
@@ -22,7 +22,7 @@ pub fn main(init: std.process.Init) !void{
     const gpa = dbg.allocator();
 
     const path:[]const u8= "/home/abhinav7/timepass/zsql/file.txt";
-    var dbtable = try table.Table.db_open(path[0..], init.io, gpa);
+    var dbtable = try table.Table.db_open(path[0..], init.io, page_allocator);
     
     
     while (true) {
@@ -34,7 +34,7 @@ pub fn main(init: std.process.Init) !void{
 
         if (input[0] == '.'){
             const meta_res = Meta.exec_meta_command(input[0..]);
-            const should_continue = try Meta.handle_meta_result(meta_res, init.io, gpa, &dbtable);
+            const should_continue = try Meta.handle_meta_result(meta_res, init.io, page_allocator, &dbtable);
             if (should_continue) { continue; }
             else break;
         }
