@@ -21,6 +21,7 @@ pub const ExecuteResult = enum {
     EXECUTE_FAILURE,
     EXECUTE_TABLE_FULL,
     EXECUTE_TABLE_EMPTY,
+    EXECUTE_DUPLICATE_KEY
 };
 
 pub const Statement = struct {
@@ -49,13 +50,20 @@ pub const Statement = struct {
 
     pub fn exec_insert(self: *Statement, io: std.Io, pg_allocator: Allocator, crs_allocator: Allocator, t: *table.Table) ExecuteResult {
         const node = t.pager.get_page(io, pg_allocator, t.root_page_no) catch return .EXECUTE_FAILURE;
-        
-        if (Node.leaf_num_cells_read(node) >=  Node.LEAF_NODE_MAX_CELLS){
+        const n_cells = Node.leaf_num_cells_read(node);
+        if (n_cells >=  Node.LEAF_NODE_MAX_CELLS){
             return .EXECUTE_TABLE_FULL;
         }
 
-        const cursor = table.Cursor.table_end(t, crs_allocator, io) catch return .EXECUTE_FAILURE;
         const row = self.row_to_insert;
+        const key_to_insert = row.id;
+        const cursor = table.Cursor.table_find(t, key_to_insert, pg_allocator, crs_allocator, io) catch return .EXECUTE_FAILURE;
+
+        if (cursor.cell_no < n_cells){
+            const key_at_index = Node.leaf_cell_key_read(node, cursor.cell_no);
+            if (key_at_index == key_to_insert)
+                return .EXECUTE_DUPLICATE_KEY;
+        }
 
         Node.leaf_insert(cursor, row.id, &row, io, pg_allocator) catch |err| switch (err) {
             error.NodeFull => return .EXECUTE_TABLE_FULL,

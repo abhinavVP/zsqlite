@@ -1,5 +1,6 @@
 const std = @import("std");
 const table = @import("../storage/table.zig");
+const Allocator = std.mem.Allocator;
 
 pub const NODE_TYPE = enum {
     NODE_TYPE_LEAF,
@@ -31,6 +32,7 @@ pub const LEAF_NODE_MAX_CELLS = LEAF_NODE_SPACE_FOR_CELLS / LEAF_NODE_CELL_SIZE;
 
 pub fn leaf_init(n: []u8) void{
     leaf_num_cells_write(n, 0);
+    set_node_type(n, .NODE_TYPE_LEAF);
 }
 
 pub fn leaf_num_cells_read(node: []u8) u32 {
@@ -82,4 +84,47 @@ pub fn leaf_insert(c: *table.Cursor, key: u32, row: *const table.Row, io: std.Io
     leaf_cell_key_write(node, c.cell_no, key);
 
     row.serialize(leaf_cell_value(node, c.cell_no));
+}
+
+pub fn leaf_find(t: *table.Table, pg_no: u32, key:u32, pg_allocator: Allocator, crs_allocator: Allocator, io: std.Io) !*table.Cursor {
+    const node = try t.pager.get_page(io, pg_allocator, t.root_page_no);
+
+    var cursor = try crs_allocator.create(table.Cursor);
+    cursor.db = t;
+    cursor.page_no = pg_no;
+
+    const index = leaf_binary_search_key(node, key);
+    cursor.cell_no = index;
+
+    return cursor;
+}
+
+fn leaf_binary_search_key(node: []u8 , key: u32) u32 {
+    var low: u32 = 0;
+    var high: u32 = leaf_num_cells_read(node);
+
+    while (low < high) {
+        const mid = (low+high)/2;
+        const key_at_mid = leaf_cell_key_read(node, mid);
+
+        if (key == key_at_mid){
+            return mid;
+        }
+        else if(key < key_at_mid){
+            high = mid;
+        }
+        else {
+            low = mid+1;
+        }
+    }
+
+    return low;
+}
+
+pub fn set_node_type(node: []u8, node_type: NODE_TYPE) void {
+    node[NODE_TYPE_OFFSET] = @intFromEnum(node_type);
+}
+
+pub fn get_node_type(node: []u8) NODE_TYPE {
+    return @enumFromInt(node[NODE_TYPE_OFFSET]);
 }

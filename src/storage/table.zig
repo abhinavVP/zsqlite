@@ -48,7 +48,7 @@ pub const Table = struct {
         const p = try pager.Pager.open(allocator, path, io);
 
         if (p.n_pages == 0){
-            const node = try p.*.get_page(io, allocator, 0);
+            const node = try p.get_page(io, allocator, 0);
             Node.leaf_init(node);
         }
 
@@ -128,5 +128,16 @@ pub const Cursor = struct {
         self.cell_no += 1;
 
         if (self.cell_no >= Node.leaf_num_cells_read(node)) self.end_of_table = true;
+    }
+
+    pub fn table_find(t: *Table, key: u32, pg_allocator: Allocator, crs_allocator: Allocator, io: std.Io) !*Cursor{
+        const root_no = t.root_page_no;
+        const root_node = try t.pager.get_page(io, pg_allocator, root_no);
+
+        if (Node.get_node_type(root_node) == .NODE_TYPE_LEAF){
+            return try Node.leaf_find(t, root_no, key, pg_allocator, crs_allocator, io);
+        }else {
+            return error.InternalNotImplemented;
+        }
     }
 };
