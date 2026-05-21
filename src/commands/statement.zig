@@ -55,6 +55,7 @@ pub const Statement = struct {
         const row = self.row_to_insert;
         const key_to_insert = row.id;
         const cursor = try table.Cursor.table_find(t, key_to_insert, pg_allocator, crs_allocator, io);
+        defer crs_allocator.destroy(cursor);
 
         if (cursor.cell_no < n_cells){
             const key_at_index = Node.leaf_cell_key_read(node, cursor.cell_no);
@@ -64,7 +65,6 @@ pub const Statement = struct {
 
         try Node.leaf_insert(cursor, row.id, &row, io, pg_allocator);
         
-        crs_allocator.destroy(cursor);
         return .EXECUTE_SUCCESS;
     }
 
@@ -159,6 +159,10 @@ pub fn handle_execute_result(result: ExecuteResult, stdout: *std.Io.Writer) !voi
         },
         .EXECUTE_TABLE_FULL => {
             try stdout.print("error: database table is full, cant insert more !\n", .{});
+            try stdout.flush();
+        },
+        .EXECUTE_DUPLICATE_KEY => {
+            try stdout.print("error: trying to insert duplicate key !\n", .{});
             try stdout.flush();
         },
         else => {
