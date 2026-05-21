@@ -140,7 +140,7 @@ pub fn leaf_insert(c: *table.Cursor, key: u32, row: *const table.Row, io: std.Io
 }
 
 pub fn leaf_find_key(t: *table.Table, pg_no: u32, key:u32, pg_allocator: Allocator, crs_allocator: Allocator, io: std.Io) !*table.Cursor {
-    const node = try t.pager.get_page(io, pg_allocator, t.root_page_no);
+    const node = try t.pager.get_page(io, pg_allocator, pg_no);
     const index = leaf_search_cell_no(node, key);
 
     var cursor = try crs_allocator.create(table.Cursor);
