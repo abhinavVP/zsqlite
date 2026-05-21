@@ -40,7 +40,7 @@ pub const Pager = struct {
 
             if (pg_no <= n_pages){
                 _ = try p.file.readPositionalAll(io, p.pages[pg_no].?[0..table.PAGE_SIZE], pg_no*table.PAGE_SIZE);
-            } else @memset(p.pages[pg_no].?, 0);
+            }
         }
 
         if (pg_no >= p.n_pages) p.n_pages = pg_no + 1;
@@ -54,6 +54,10 @@ pub const Pager = struct {
         }
 
         try p.file.writePositionalAll(io, p.pages[pg_no].?[0..table.PAGE_SIZE], pg_no*table.PAGE_SIZE);
+    }
+
+    pub fn get_unused_page_no(p: *Pager) u32 {
+        return p.n_pages;
     }
 
 };

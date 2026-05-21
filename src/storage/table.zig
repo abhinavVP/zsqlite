@@ -50,6 +50,7 @@ pub const Table = struct {
         if (p.n_pages == 0){
             const node = try p.get_page(io, allocator, 0);
             Node.leaf_init(node);
+            Node.set_node_is_root(node, true);
         }
 
         return Table {
@@ -85,59 +86,48 @@ pub const Table = struct {
 };
 
 pub const Cursor = struct {
-    db: *Table,
+    table: *Table,
     page_no: u32,
     cell_no: u32,
     end_of_table: bool,
 
-    pub fn table_start(t: *Table, allocator: Allocator, pg_allocator: Allocator,  io: std.Io) !*Cursor{
-        var c = try allocator.create(Cursor);
-        c.db = t;
-        c.page_no = t.root_page_no;
-        c.cell_no = 0;
-
-        const root = try pager.Pager.get_page(t.pager, io, pg_allocator, t.root_page_no);
-        const n_cells = Node.leaf_num_cells_read(root);
-        c.end_of_table = (n_cells == 0);
-
-        return c;
-    }
-
-    pub fn table_end(t: *Table, allocator: Allocator, io: std.Io) !*Cursor {
-        var c = try allocator.create(Cursor);
-        c.db = t;
-        c.page_no = t.root_page_no;
-        
-        const root = try pager.Pager.get_page(t.pager, io, allocator, t.root_page_no);
-        c.cell_no = Node.leaf_num_cells_read(root);
-
-        c.end_of_table = true;
+    pub fn table_start(t: *Table, pg_allocator: Allocator, crs_allocator: Allocator, io: std.Io) !*Cursor{
+        var c = try table_find(t, 0, pg_allocator, crs_allocator, io);
+        const node = try t.pager.get_page(io, pg_allocator, c.page_no);
+        c.end_of_table = (Node.leaf_num_cells_read(node) == 0);
 
         return c;
     }
 
     pub fn value_at_position(self: *Cursor, io: std.Io, pgallocator: Allocator) ![]u8{
         const pgno = self.page_no;
-        const page = try self.db.pager.get_page(io, pgallocator, pgno);
+        const page = try self.table.pager.get_page(io, pgallocator, pgno);
         
         return Node.leaf_cell_value(page, self.cell_no);
     }
 
     pub fn advance(self: *Cursor, io: std.Io, pgallocator: Allocator) !void {
-        const node = try self.db.pager.get_page(io, pgallocator, self.page_no);
+        const node = try self.table.pager.get_page(io, pgallocator, self.page_no);
         self.cell_no += 1;
 
-        if (self.cell_no >= Node.leaf_num_cells_read(node)) self.end_of_table = true;
+        if (self.cell_no >= Node.leaf_num_cells_read(node)){
+            const next_page = Node.leaf_next_node_read(node);
+            if (next_page == 0){
+                self.end_of_table = true;     
+            } else {
+                self.cell_no = 0;
+                self.page_no = next_page;
+            }
+        }
     }
 
     pub fn table_find(t: *Table, key: u32, pg_allocator: Allocator, crs_allocator: Allocator, io: std.Io) !*Cursor{
         const root_no = t.root_page_no;
         const root_node = try t.pager.get_page(io, pg_allocator, root_no);
 
-        if (Node.get_node_type(root_node) == .NODE_TYPE_LEAF){
-            return try Node.leaf_find(t, root_no, key, pg_allocator, crs_allocator, io);
-        }else {
-            return error.InternalNotImplemented;
-        }
+        return switch (Node.get_node_type(root_node)) {
+            .NODE_TYPE_INTERNAL => try Node.internal_find_key(t, root_no, key, pg_allocator, crs_allocator, io),
+            .NODE_TYPE_LEAF => try Node.leaf_find_key(t, root_no, key, pg_allocator, crs_allocator, io)
+        };
     }
 };

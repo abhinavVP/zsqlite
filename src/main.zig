@@ -21,7 +21,7 @@ pub fn main(init: std.process.Init) !void{
     defer _ = dbg.deinit();
     const gpa = dbg.allocator();
 
-    const path:[]const u8= "/home/abhinav7/timepass/zsql/file.txt";
+    const path:[]const u8= "/home/abhinav7/timepass/zsql/db.txt";
     var dbtable = try table.Table.db_open(path[0..], init.io, page_allocator);
     
     
@@ -45,7 +45,7 @@ pub fn main(init: std.process.Init) !void{
         const should_continue = try statement.handle_prepare_result(prep_res, stdout);
         if (should_continue) continue;
 
-        const exe_res = (s.exec_statement(init.io, page_allocator, gpa, &dbtable));
+        const exe_res = try s.exec_statement(init.io, page_allocator, gpa, &dbtable);
         try statement.handle_execute_result(exe_res, stdout);
     }
 }

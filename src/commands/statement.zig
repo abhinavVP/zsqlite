@@ -41,23 +41,20 @@ pub const Statement = struct {
         return PrepareResult.PREPARE_INVALID_INPUT;
     }
 
-    pub fn exec_statement(self: *Statement, io: std.Io, pg_allocator: Allocator,crs_allocator: Allocator, t: *table.Table) ExecuteResult{
+    pub fn exec_statement(self: *Statement, io: std.Io, pg_allocator: Allocator,crs_allocator: Allocator, t: *table.Table) !ExecuteResult{
         switch (self.type){
-            StatementType.STATEMENT_INSERT => return self.exec_insert(io, pg_allocator, crs_allocator, t),
-            StatementType.STATEMENT_SELECT => return exec_select(io, pg_allocator, crs_allocator, t),
+            StatementType.STATEMENT_INSERT => return try self.exec_insert(io, pg_allocator, crs_allocator, t),
+            StatementType.STATEMENT_SELECT => return try exec_select(io, pg_allocator, crs_allocator, t),
         }
     }
 
-    pub fn exec_insert(self: *Statement, io: std.Io, pg_allocator: Allocator, crs_allocator: Allocator, t: *table.Table) ExecuteResult {
-        const node = t.pager.get_page(io, pg_allocator, t.root_page_no) catch return .EXECUTE_FAILURE;
+    pub fn exec_insert(self: *Statement, io: std.Io, pg_allocator: Allocator, crs_allocator: Allocator, t: *table.Table) !ExecuteResult {
+        const node = try t.pager.get_page(io, pg_allocator, t.root_page_no);
         const n_cells = Node.leaf_num_cells_read(node);
-        if (n_cells >=  Node.LEAF_NODE_MAX_CELLS){
-            return .EXECUTE_TABLE_FULL;
-        }
 
         const row = self.row_to_insert;
         const key_to_insert = row.id;
-        const cursor = table.Cursor.table_find(t, key_to_insert, pg_allocator, crs_allocator, io) catch return .EXECUTE_FAILURE;
+        const cursor = try table.Cursor.table_find(t, key_to_insert, pg_allocator, crs_allocator, io);
 
         if (cursor.cell_no < n_cells){
             const key_at_index = Node.leaf_cell_key_read(node, cursor.cell_no);
@@ -65,33 +62,32 @@ pub const Statement = struct {
                 return .EXECUTE_DUPLICATE_KEY;
         }
 
-        Node.leaf_insert(cursor, row.id, &row, io, pg_allocator) catch |err| switch (err) {
-            error.NodeFull => return .EXECUTE_TABLE_FULL,
-            else => return .EXECUTE_FAILURE
-        };
+        try Node.leaf_insert(cursor, row.id, &row, io, pg_allocator);
         
         crs_allocator.destroy(cursor);
         return .EXECUTE_SUCCESS;
     }
 
-    pub fn exec_select(io: std.Io, pg_allocator: Allocator, crs_allocator: Allocator, t: *table.Table) ExecuteResult {
+    pub fn exec_select(io: std.Io, pg_allocator: Allocator, crs_allocator: Allocator, t: *table.Table) !ExecuteResult {
         var output_buffer: [1024]u8 = undefined;
         var writer = std.Io.File.stdout().writer(io, &output_buffer);
         const stdout = &writer.interface;
 
         // if (t.n_rows == 0) return .EXECUTE_TABLE_EMPTY;
 
-        var cursor = table.Cursor.table_start(t, crs_allocator, pg_allocator, io) catch return .EXECUTE_FAILURE;
+        var cursor = try table.Cursor.table_start(t, pg_allocator, crs_allocator, io);
+        defer crs_allocator.destroy(cursor);
 
+        if (cursor.end_of_table) return .EXECUTE_TABLE_EMPTY;
+        
         var row: table.Row = undefined;
         while (!(cursor.end_of_table)){
-            var row_raw = cursor.value_at_position(io, pg_allocator) catch return .EXECUTE_FAILURE;
+            var row_raw = try cursor.value_at_position(io, pg_allocator);
             table.Row.deserialize(row_raw[0..], &row);
-            print_row(row, stdout) catch return .EXECUTE_FAILURE;
-            cursor.advance(io, pg_allocator) catch {};
+            try print_row(row, stdout);
+            try cursor.advance(io, pg_allocator);
         }
 
-        crs_allocator.destroy(cursor);
 
         return .EXECUTE_SUCCESS;
     }
@@ -166,7 +162,7 @@ pub fn handle_execute_result(result: ExecuteResult, stdout: *std.Io.Writer) !voi
             try stdout.flush();
         },
         else => {
-            try stdout.print("error: out of program memory !\n", .{});
+            try stdout.print("error: unknown error !\n", .{});
             try stdout.flush();
         }
     }
